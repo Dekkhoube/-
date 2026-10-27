@@ -1,0 +1,163 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == "abirkhan33893@gmail.com" && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Helpers
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.email is string && data.email.size() <= 150 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('currentLanguage' in data) || data.currentLanguage in ['bn', 'en', 'ar']) &&
+             (!('selectedCity' in data) || (data.selectedCity is string && data.selectedCity.size() <= 50)) &&
+             (!('arabicFontSize' in data) || (data.arabicFontSize is number && data.arabicFontSize >= 14 && data.arabicFontSize <= 40)) &&
+             (!('bengaliFontSize' in data) || (data.bengaliFontSize is number && data.bengaliFontSize >= 10 && data.bengaliFontSize <= 30)) &&
+             (!('isDarkMode' in data) || data.isDarkMode is bool);
+    }
+
+    function isValidBookmark(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.type in ['QURAN', 'HADITH', 'DUA'] &&
+             data.referenceId is string && data.referenceId.size() <= 100 &&
+             data.titleBengali is string && data.titleBengali.size() <= 200 &&
+             (!('arabicSnippet' in data) || (data.arabicSnippet is string && data.arabicSnippet.size() <= 2000)) &&
+             (!('bengaliSnippet' in data) || (data.bengaliSnippet is string && data.bengaliSnippet.size() <= 2000)) &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 1000));
+    }
+
+    function isValidDailyWorship(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.dateStr is string && data.dateStr.size() == 10 &&
+             (!('fajr' in data) || data.fajr is bool) &&
+             (!('dhuhr' in data) || data.dhuhr is bool) &&
+             (!('asr' in data) || data.asr is bool) &&
+             (!('maghrib' in data) || data.maghrib is bool) &&
+             (!('isha' in data) || data.isha is bool) &&
+             (!('tahajjud' in data) || data.tahajjud is bool) &&
+             (!('quranRecited' in data) || data.quranRecited is bool) &&
+             (!('fasting' in data) || data.fasting is bool) &&
+             (!('sadaqah' in data) || data.sadaqah is bool);
+    }
+
+    function isValidErrorReport(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.contentType in ['QURAN', 'HADITH', 'DUA', 'AUDIO'] &&
+             data.recordId is string && data.recordId.size() <= 100 &&
+             data.issueCategory is string && data.issueCategory.size() <= 50 &&
+             data.userExplanation is string && data.userExplanation.size() >= 3 && data.userExplanation.size() <= 1000 &&
+             (!('referenceSource' in data) || (data.referenceSource is string && data.referenceSource.size() <= 500)) &&
+             data.status in ['PENDING', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED'] &&
+             (!('reviewerNotes' in data) || (data.reviewerNotes is string && data.reviewerNotes.size() <= 1000));
+    }
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if false; // No directory scraping
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'email', 'createdAt']) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isOwner(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'currentLanguage', 'selectedCity',
+                         'arabicFontSize', 'bengaliFontSize', 'isDarkMode', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) || isAdmin();
+
+      // User Subcollection: Bookmarks
+      match /bookmarks/{bookmarkId} {
+        allow get, list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(bookmarkId) &&
+                         incoming().keys().hasAll(['userId', 'type', 'referenceId', 'titleBengali', 'createdAt']) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidBookmark(incoming());
+
+        allow update: if isOwner(userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidBookmark(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['note', 'updatedAt']);
+
+        allow delete: if isOwner(userId);
+      }
+
+      // User Subcollection: Worship Tracker
+      match /worship/{dateStr} {
+        allow get, list: if isOwner(userId);
+
+        allow create, update: if isOwner(userId) &&
+                                 incoming().userId == userId &&
+                                 isValidDailyWorship(incoming());
+
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Error Reports (Crowdsourced corrections)
+    match /error_reports/{reportId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(reportId) &&
+                       incoming().keys().hasAll(['userId', 'contentType', 'recordId', 'issueCategory', 'userExplanation', 'status', 'createdAt']) &&
+                       incoming().status == 'PENDING' &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       isValidErrorReport(incoming());
+
+      allow update: if isAdmin() &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidErrorReport(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewerNotes', 'updatedAt']);
+
+      allow delete: if isAdmin();
+    }
+  }
+}

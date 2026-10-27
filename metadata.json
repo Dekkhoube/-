@@ -1,0 +1,6 @@
+{
+  "name": "Noor Islamic",
+  "description": "Complete production-ready Islamic app for Bengali Muslims featuring Quran, Prayer Times, Qibla, Hadith, Duas, Tasbih, Ramadan Mode, Zakat, and Worship Tracker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

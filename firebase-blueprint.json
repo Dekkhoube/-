@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and synced preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "currentLanguage": { "type": "string", "enum": ["bn", "en", "ar"] },
+        "selectedCity": { "type": "string" },
+        "arabicFontSize": { "type": "number" },
+        "bengaliFontSize": { "type": "number" },
+        "isDarkMode": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "createdAt"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "Personal verse, hadith, or dua bookmarks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["QURAN", "HADITH", "DUA"] },
+        "referenceId": { "type": "string" },
+        "titleBengali": { "type": "string" },
+        "arabicSnippet": { "type": "string" },
+        "bengaliSnippet": { "type": "string" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "referenceId", "titleBengali", "createdAt"]
+    },
+    "DailyWorship": {
+      "title": "DailyWorship",
+      "description": "Daily 5 prayers and worship tracker log",
+      "type": "object",
+      "properties": {
+        "dateStr": { "type": "string" },
+        "userId": { "type": "string" },
+        "fajr": { "type": "boolean" },
+        "dhuhr": { "type": "boolean" },
+        "asr": { "type": "boolean" },
+        "maghrib": { "type": "boolean" },
+        "isha": { "type": "boolean" },
+        "tahajjud": { "type": "boolean" },
+        "quranRecited": { "type": "boolean" },
+        "fasting": { "type": "boolean" },
+        "sadaqah": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dateStr", "userId"]
+    },
+    "ErrorReport": {
+      "title": "ErrorReport",
+      "description": "User reported text, translation, or reference issue",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "contentType": { "type": "string", "enum": ["QURAN", "HADITH", "DUA", "AUDIO"] },
+        "recordId": { "type": "string" },
+        "issueCategory": { "type": "string" },
+        "userExplanation": { "type": "string" },
+        "referenceSource": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "UNDER_REVIEW", "RESOLVED", "REJECTED"] },
+        "reviewerNotes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "contentType", "recordId", "issueCategory", "userExplanation", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": "Bookmark",
+      "description": "User personal bookmarks"
+    },
+    "/users/{userId}/worship/{dateStr}": {
+      "schema": "DailyWorship",
+      "description": "User daily worship logs"
+    },
+    "/error_reports/{reportId}": {
+      "schema": "ErrorReport",
+      "description": "Crowdsourced content error reports"
+    }
+  }
+}
