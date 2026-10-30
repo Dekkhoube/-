@@ -20,7 +20,8 @@ data class Ayah(
     val textBengali: String,
     val transliteration: String,
     val audioUrl: String,
-    val juzNumber: Int
+    val juzNumber: Int,
+    val page: Int = 1
 )
 
 data class JuzInfo(

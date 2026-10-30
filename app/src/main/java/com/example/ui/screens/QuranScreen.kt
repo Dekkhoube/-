@@ -25,12 +25,18 @@ import com.example.data.model.JuzInfo
 import com.example.data.model.Surah
 import com.example.data.repository.QuranRepository
 import com.example.ui.theme.Emerald700
+import com.example.ui.theme.Emerald800
 import com.example.ui.theme.GoldAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuranScreen(
     bookmarks: List<BookmarkEntity>,
+    lastReadSurahName: String = "আল-ফাতিহা",
+    lastReadAyahNumber: Int = 1,
+    lastReadPageNumber: Int = 1,
+    onResumeLastRead: () -> Unit = {},
+    onOpenHafeziPage: (Int) -> Unit = {},
     onSelectSurah: (Surah) -> Unit,
     onSelectJuz: (JuzInfo) -> Unit,
     onRemoveBookmark: (Long) -> Unit,
@@ -77,18 +83,79 @@ fun QuranScreen(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp)
                 .testTag("quran_search_bar"),
             shape = RoundedCornerShape(12.dp),
             singleLine = true
         )
 
-        // Tab Row (Surah, Juz, Bookmarks)
-        TabRow(
+        // Last Read Resume Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .clickable { onResumeLastRead() }
+                .testTag("quran_last_read_card"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Emerald700.copy(alpha = 0.3f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Emerald700),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bookmark,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "সর্বশেষ পঠিত আয়াত",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Emerald800,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "সূরা $lastReadSurahName • আয়াত $lastReadAyahNumber (পৃষ্ঠা $lastReadPageNumber)",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+                    }
+                }
+                FilledTonalButton(
+                    onClick = onResumeLastRead,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text("পড়া চালান", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Tab Row (Surah, Juz, Hafezi Quran, Bookmarks)
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
+            edgePadding = 16.dp,
             containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            contentColor = MaterialTheme.colorScheme.primary
         ) {
             Tab(
                 selected = selectedTab == 0,
@@ -101,6 +168,17 @@ fun QuranScreen(
                 onClick = { selectedTab = 1 },
                 text = { Text("পারা / জুয (৩০)", fontWeight = FontWeight.Bold) },
                 modifier = Modifier.testTag("tab_juz")
+            )
+            Tab(
+                selected = false,
+                onClick = { onOpenHafeziPage(lastReadPageNumber) },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp), tint = GoldAccent)
+                        Text("হাফেজী কুরআন (মুসহাফ)", fontWeight = FontWeight.Bold)
+                    }
+                },
+                modifier = Modifier.testTag("tab_hafezi_mushaf")
             )
             Tab(
                 selected = selectedTab == 2,

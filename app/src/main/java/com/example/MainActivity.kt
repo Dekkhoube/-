@@ -32,6 +32,7 @@ import com.example.ui.components.ErrorReportDialog
 import com.example.ui.screens.*
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.NoorIslamicTheme
+import com.example.util.configureAppCheck
 import com.example.viewmodel.MainViewModel
 
 enum class MainNavTab(
@@ -51,6 +52,8 @@ enum class MainNavTab(
 enum class SubScreen {
     NONE,
     SURAH_DETAIL,
+    HAFEZI_PAGE_VIEW,
+    NAMAZ_SHIKKHA,
     QIBLA,
     TASBIH,
     RAMADAN,
@@ -59,7 +62,8 @@ enum class SubScreen {
     MOSQUE,
     ADMIN,
     SETTINGS,
-    CALENDAR
+    CALENDAR,
+    ISLAMIC_AI
 }
 
 class MainActivity : ComponentActivity() {
@@ -69,6 +73,8 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Initialize Firebase App Check with synchronous debug token attestation
+        configureAppCheck(this, intent)
         enableEdgeToEdge()
 
         setContent {
@@ -108,15 +114,7 @@ class MainActivity : ComponentActivity() {
             }
 
             NoorIslamicTheme(darkTheme = uiState.isDarkMode) {
-                if (currentUser == null) {
-                    AuthScreen(
-                        onAuthSuccess = { user ->
-                            currentUser = user
-                            viewModel.syncUserProfileOnSignIn(user)
-                        }
-                    )
-                } else {
-                    Scaffold(
+                Scaffold(
                     topBar = {
                         TopAppBar(
                             title = {
@@ -137,6 +135,16 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
+                                IconButton(
+                                    onClick = { currentSubScreen = SubScreen.ISLAMIC_AI },
+                                    modifier = Modifier.testTag("app_gemini_ai_icon")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = "ইসলামিক এআই সহকারী (Gemini)",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                                 IconButton(
                                     onClick = { currentSubScreen = SubScreen.SETTINGS },
                                     modifier = Modifier.testTag("app_settings_icon")
@@ -162,6 +170,8 @@ class MainActivity : ComponentActivity() {
                                     if (audioState.isPlaying) viewModel.audioPlayer.pauseAudio()
                                     else viewModel.audioPlayer.resumeAudio()
                                 },
+                                onNext = { viewModel.playNextAyah() },
+                                onPrevious = { viewModel.playPreviousAyah() },
                                 onClose = { viewModel.audioPlayer.stopAudio() }
                             )
 
@@ -219,6 +229,14 @@ class MainActivity : ComponentActivity() {
                                             ayahs = uiState.currentSurahAyahs,
                                             arabicFontSize = uiState.arabicFontSize,
                                             bengaliFontSize = uiState.bengaliFontSize,
+                                            currentPlayingAyahNumber = audioState.currentAyahNumber,
+                                            currentPlayingSurahNumber = audioState.currentSurahNumber,
+                                            isAudioPlaying = audioState.isPlaying,
+                                            selectedReciter = uiState.selectedReciter,
+                                            recitersList = com.example.data.repository.QuranRepository.reciters,
+                                            isContinuousPlayback = uiState.isContinuousQuranAudio,
+                                            onSelectReciter = { reciter -> viewModel.selectReciter(reciter) },
+                                            onToggleContinuous = { viewModel.toggleContinuousPlayback() },
                                             onBack = { currentSubScreen = SubScreen.NONE },
                                             onPlayAyah = { ayah ->
                                                 viewModel.playAyah(ayah, surah.nameBengali)
@@ -237,9 +255,45 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onReportAyah = { ayah ->
                                                 viewModel.openErrorReport("QURAN", "সূরা ${surah.nameBengali}:${ayah.numberInSurah}")
+                                            },
+                                            onSwitchToMushafPage = { targetPage ->
+                                                viewModel.openHafeziMushafPage(targetPage)
+                                                currentSubScreen = SubScreen.HAFEZI_PAGE_VIEW
                                             }
                                         )
                                     }
+                                }
+                                SubScreen.HAFEZI_PAGE_VIEW -> {
+                                    HafeziQuranPageView(
+                                        initialPage = uiState.selectedMushafPage,
+                                        currentPlayingSurah = audioState.currentSurahNumber,
+                                        currentPlayingAyah = audioState.currentAyahNumber,
+                                        isAudioPlaying = audioState.isPlaying,
+                                        selectedReciter = uiState.selectedReciter,
+                                        onPlayAyah = { ayah ->
+                                            val s = com.example.data.repository.QuranRepository.getSurah(ayah.surahNumber)
+                                            viewModel.playAyah(ayah, s?.nameBengali ?: "কুরআন")
+                                        },
+                                        onBookmarkPage = { pageNum ->
+                                            viewModel.toggleBookmark(
+                                                type = "QURAN_PAGE",
+                                                refId = "PAGE_$pageNum",
+                                                title = "হাফেজী কুরআন পৃষ্ঠা $pageNum",
+                                                arabic = "صفحة $pageNum",
+                                                bengali = "পৃষ্ঠা $pageNum"
+                                            )
+                                        },
+                                        onSwitchToListView = {
+                                            val surah = com.example.data.repository.QuranRepository.getSurah(uiState.lastReadSurahNumber)
+                                                ?: com.example.data.repository.QuranRepository.all114Surahs.first()
+                                            viewModel.selectSurah(surah)
+                                            currentSubScreen = SubScreen.SURAH_DETAIL
+                                        },
+                                        onBack = { currentSubScreen = SubScreen.NONE }
+                                    )
+                                }
+                                SubScreen.NAMAZ_SHIKKHA -> {
+                                    NamazShikkhaScreen(onBack = { currentSubScreen = SubScreen.NONE })
                                 }
                                 SubScreen.CALENDAR -> {
                                     MultiCalendarScreen(
@@ -258,6 +312,10 @@ class MainActivity : ComponentActivity() {
                                         distanceKm = uiState.distanceToKaabaKm,
                                         accuracy = uiState.compassAccuracy,
                                         cityName = uiState.selectedLocation.nameBengali,
+                                        hasCompassSensor = uiState.hasCompassSensor,
+                                        isFacingQibla = uiState.isFacingQibla,
+                                        onStartCompass = { viewModel.startCompass() },
+                                        onStopCompass = { viewModel.stopCompass() },
                                         onBack = { currentSubScreen = SubScreen.NONE }
                                     )
                                 }
@@ -337,6 +395,11 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToAdmin = { currentSubScreen = SubScreen.ADMIN }
                                     )
                                 }
+                                SubScreen.ISLAMIC_AI -> {
+                                    IslamicAiScreen(
+                                        onBack = { currentSubScreen = SubScreen.NONE }
+                                    )
+                                }
                                 else -> {}
                             }
                         } else {
@@ -346,6 +409,19 @@ class MainActivity : ComponentActivity() {
                                     HomeScreen(
                                         uiState = uiState,
                                         adminNotices = adminContent.filter { it.contentType == "NOTICE" },
+                                        lastReadSurahName = uiState.lastReadSurahNameBengali,
+                                        lastReadAyahNumber = uiState.lastReadAyahNumber,
+                                        lastReadPageNumber = uiState.lastReadPageNumber,
+                                        onResumeLastRead = {
+                                            viewModel.resumeLastRead { surah, ayahNumber ->
+                                                currentSubScreen = SubScreen.SURAH_DETAIL
+                                            }
+                                        },
+                                        onNavigateToNamazShikkha = { currentSubScreen = SubScreen.NAMAZ_SHIKKHA },
+                                        onNavigateToHafeziQuran = { pageNum ->
+                                            viewModel.openHafeziMushafPage(pageNum)
+                                            currentSubScreen = SubScreen.HAFEZI_PAGE_VIEW
+                                        },
                                         onNavigateToQuran = { currentTab = MainNavTab.QURAN },
                                         onNavigateToPrayer = { currentTab = MainNavTab.PRAYER },
                                         onNavigateToQibla = { currentSubScreen = SubScreen.QIBLA },
@@ -355,6 +431,7 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToWorship = { currentSubScreen = SubScreen.WORSHIP },
                                         onNavigateToMosque = { currentSubScreen = SubScreen.MOSQUE },
                                         onNavigateToCalendar = { currentSubScreen = SubScreen.CALENDAR },
+                                        onNavigateToAi = { currentSubScreen = SubScreen.ISLAMIC_AI },
                                         onPlayAyah = { ayah, surahName ->
                                             viewModel.playAyah(ayah, surahName)
                                         }
@@ -363,16 +440,25 @@ class MainActivity : ComponentActivity() {
                                 MainNavTab.QURAN -> {
                                     QuranScreen(
                                         bookmarks = bookmarks,
+                                        lastReadSurahName = uiState.lastReadSurahNameBengali,
+                                        lastReadAyahNumber = uiState.lastReadAyahNumber,
+                                        lastReadPageNumber = uiState.lastReadPageNumber,
+                                        onResumeLastRead = {
+                                            viewModel.resumeLastRead { surah, ayahNumber ->
+                                                currentSubScreen = SubScreen.SURAH_DETAIL
+                                            }
+                                        },
+                                        onOpenHafeziPage = { pageNum ->
+                                            viewModel.openHafeziMushafPage(pageNum)
+                                            currentSubScreen = SubScreen.HAFEZI_PAGE_VIEW
+                                        },
                                         onSelectSurah = { surah ->
                                             viewModel.selectSurah(surah)
                                             currentSubScreen = SubScreen.SURAH_DETAIL
                                         },
                                         onSelectJuz = { juz ->
-                                            val surah = com.example.data.repository.QuranRepository.getSurah(juz.startingSurahNumber)
-                                            if (surah != null) {
-                                                viewModel.selectSurah(surah)
-                                                currentSubScreen = SubScreen.SURAH_DETAIL
-                                            }
+                                            viewModel.selectJuz(juz)
+                                            currentSubScreen = SubScreen.SURAH_DETAIL
                                         },
                                         onRemoveBookmark = { id ->
                                             viewModel.removeBookmark(id)
@@ -450,6 +536,11 @@ class MainActivity : ComponentActivity() {
                                 }
                                 MainNavTab.MORE -> {
                                     MoreMenuScreen(
+                                        onNavigateToNamazShikkha = { currentSubScreen = SubScreen.NAMAZ_SHIKKHA },
+                                        onNavigateToHafeziQuran = {
+                                            viewModel.openHafeziMushafPage(uiState.lastReadPageNumber)
+                                            currentSubScreen = SubScreen.HAFEZI_PAGE_VIEW
+                                        },
                                         onNavigateToTasbih = { currentSubScreen = SubScreen.TASBIH },
                                         onNavigateToRamadan = { currentSubScreen = SubScreen.RAMADAN },
                                         onNavigateToZakat = { currentSubScreen = SubScreen.ZAKAT },
@@ -458,7 +549,8 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToQibla = { currentSubScreen = SubScreen.QIBLA },
                                         onNavigateToCalendar = { currentSubScreen = SubScreen.CALENDAR },
                                         onNavigateToAdmin = { currentSubScreen = SubScreen.ADMIN },
-                                        onNavigateToSettings = { currentSubScreen = SubScreen.SETTINGS }
+                                        onNavigateToSettings = { currentSubScreen = SubScreen.SETTINGS },
+                                        onNavigateToAi = { currentSubScreen = SubScreen.ISLAMIC_AI }
                                     )
                                 }
                             }
@@ -482,10 +574,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-}
 
 @Composable
 fun MoreMenuScreen(
+    onNavigateToNamazShikkha: () -> Unit = {},
+    onNavigateToHafeziQuran: () -> Unit = {},
     onNavigateToTasbih: () -> Unit,
     onNavigateToRamadan: () -> Unit,
     onNavigateToZakat: () -> Unit,
@@ -495,6 +588,7 @@ fun MoreMenuScreen(
     onNavigateToCalendar: () -> Unit,
     onNavigateToAdmin: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToAi: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
@@ -512,6 +606,20 @@ fun MoreMenuScreen(
             )
         }
 
+        item {
+            MoreMenuItem(
+                "ইসলামিক এআই সহকারী (Gemini)",
+                "কুরআন, হাদিস ও ইসলামিক জরুরি প্রশ্নোত্তর",
+                Icons.Default.AutoAwesome,
+                onNavigateToAi
+            )
+        }
+        item {
+            MoreMenuItem("নামাজ ও অযু শিক্ষা", "৫ ওয়াক্ত নামাজ, রাকাত সংখ্যা ও পূর্ণাঙ্গ অযু", Icons.Default.SelfImprovement, onNavigateToNamazShikkha)
+        }
+        item {
+            MoreMenuItem("হাফেজী কুরআন (মুসহাফ)", "ঐতিহ্যবাহী ১৫ লাইনের মুদ্রিত কুরআন ৬০৪ পৃষ্ঠা", Icons.Default.AutoStories, onNavigateToHafeziQuran)
+        }
         item {
             MoreMenuItem("বাংলা, ইংরেজি ও হিজরি ক্যালেন্ডার", "সমন্বিত বহু-ভাষিক বর্ষপঞ্জি ও নামাজের সময়", Icons.Default.CalendarMonth, onNavigateToCalendar)
         }

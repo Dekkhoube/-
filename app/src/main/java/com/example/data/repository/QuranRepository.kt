@@ -1,16 +1,34 @@
 package com.example.data.repository
 
+import android.content.Context
+import android.util.JsonReader
 import com.example.data.model.Ayah
 import com.example.data.model.JuzInfo
 import com.example.data.model.ReciterInfo
 import com.example.data.model.Surah
+import java.io.InputStreamReader
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 object QuranRepository {
 
+    private val surahAyahsMap = ConcurrentHashMap<Int, List<Ayah>>()
+    private val juzAyahsMap = ConcurrentHashMap<Int, MutableList<Ayah>>()
+    private val pageAyahsMap = ConcurrentHashMap<Int, MutableList<Ayah>>()
+    private val allAyahsList = mutableListOf<Ayah>()
+    @Volatile
+    private var isDataLoaded = false
+
     val reciters = listOf(
         ReciterInfo("alafasy", "মিশারি রাশিদ আল-আফাসী", "Mishary Rashid Alafasy", "https://everyayah.com/data/Alafasy_128kbps/"),
-        ReciterInfo("abdulbasit", "আব্দুল বাসেত মুজাওয়াদ", "Abdul Basit Mujawwad", "https://everyayah.com/data/Abdul_Basit_Mujawwad_128kbps/"),
-        ReciterInfo("ghamadi", "সাদ আল-গামেদী", "Saad Al-Ghamdi", "https://everyayah.com/data/Ghamadi_40kbps/")
+        ReciterInfo("sudais", "আব্দুর রহমান আস-সুদাইস (ইমামে কা'বা)", "Abdurrahmaan As-Sudais", "https://everyayah.com/data/Abdurrahmaan_As-Sudais_192kbps/"),
+        ReciterInfo("muaiqly", "মাহের আল-মুয়াইক্বলী (ইমামে হারাম)", "Maher Al Muaiqly", "https://everyayah.com/data/MaherAlMuaiqly128kbps/"),
+        ReciterInfo("abdulbasit", "ক্বারী আব্দুল বাসেত (মুজাওয়াদ)", "Abdul Basit Mujawwad", "https://everyayah.com/data/Abdul_Basit_Mujawwad_128kbps/"),
+        ReciterInfo("ghamadi", "সা'দ আল-গামেদী", "Saad Al-Ghamdi", "https://everyayah.com/data/Ghamadi_40kbps/"),
+        ReciterInfo("shatri", "আবু বকর আল-শাতরী", "Abu Bakr Ash-Shatri", "https://everyayah.com/data/Abu_Bakr_Ash-Shaatree_128kbps/"),
+        ReciterInfo("husary", "মাহমুদ খলিল আল-হুসারী", "Mahmoud Khalil Al-Husary", "https://everyayah.com/data/Husary_128kbps/"),
+        ReciterInfo("shuraim", "সাউদ আশ-শুরাইম (সাবেক ইমামে কা'বা)", "Saood ash-Shuraym", "https://everyayah.com/data/Saood_ash-Shuraym_128kbps/"),
+        ReciterInfo("minshawi", "সিদ্দিক আল-মিনশাবী", "Mohamed Siddiq Al-Minshawi", "https://everyayah.com/data/Minshawy_Murattal_128kbps/")
     )
 
     val all114Surahs: List<Surah> = listOf(
@@ -230,14 +248,135 @@ object QuranRepository {
 
     fun getSurah(number: Int): Surah? = all114Surahs.find { it.number == number }
 
-    fun getAyahsForSurah(surahNumber: Int): List<Ayah> {
-        val verified = verifiedAyahs[surahNumber]
-        if (verified != null) return verified
+    @Synchronized
+    fun loadQuranData(context: Context) {
+        if (isDataLoaded) return
+        try {
+            context.assets.open("quran_complete_30para.json").use { inputStream ->
+                val reader = JsonReader(InputStreamReader(inputStream, "UTF-8"))
+                reader.beginObject()
+                while (reader.hasNext()) {
+                    val surahKey = reader.nextName()
+                    val surahNumber = surahKey.toIntOrNull() ?: 1
+                    val ayahList = mutableListOf<Ayah>()
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        var id = 0
+                        var n = 0
+                        var ar = ""
+                        var bn = ""
+                        var j = 1
+                        var p = 1
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "id" -> id = reader.nextInt()
+                                "n" -> n = reader.nextInt()
+                                "ar" -> ar = reader.nextString()
+                                "bn" -> bn = reader.nextString()
+                                "j" -> j = reader.nextInt()
+                                "p" -> p = reader.nextInt()
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                        val audioUrl = String.format(
+                            Locale.US,
+                            "https://everyayah.com/data/Alafasy_128kbps/%03d%03d.mp3",
+                            surahNumber,
+                            n
+                        )
+                        val ayah = Ayah(
+                            numberInQuran = id,
+                            surahNumber = surahNumber,
+                            numberInSurah = n,
+                            textArabic = ar,
+                            textBengali = bn,
+                            transliteration = "",
+                            audioUrl = audioUrl,
+                            juzNumber = j,
+                            page = p
+                        )
+                        ayahList.add(ayah)
+                        synchronized(allAyahsList) {
+                            allAyahsList.add(ayah)
+                        }
+                        val juzList = juzAyahsMap.getOrPut(j) { mutableListOf() }
+                        synchronized(juzList) {
+                            juzList.add(ayah)
+                        }
+                        val pageList = pageAyahsMap.getOrPut(p) { mutableListOf() }
+                        synchronized(pageList) {
+                            pageList.add(ayah)
+                        }
+                    }
+                    reader.endArray()
+                    surahAyahsMap[surahNumber] = ayahList
+                }
+                reader.endObject()
+                isDataLoaded = true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
-        // If specific verses for remaining surahs aren't individually bundled,
-        // provide the verified first verse placeholder with accurate audio URL
+    fun getAyahsForPage(pageNumber: Int): List<Ayah> {
+        val loaded = pageAyahsMap[pageNumber]
+        if (!loaded.isNullOrEmpty()) return loaded
+        // Fallback search across loaded surahs
+        val pageResults = mutableListOf<Ayah>()
+        for (surahList in surahAyahsMap.values) {
+            for (ayah in surahList) {
+                if (ayah.page == pageNumber) {
+                    pageResults.add(ayah)
+                }
+            }
+        }
+        return pageResults
+    }
+
+    fun getPageForAyah(surahNumber: Int, ayahNumber: Int): Int {
+        val ayahs = surahAyahsMap[surahNumber]
+        val ayah = ayahs?.find { it.numberInSurah == ayahNumber }
+        return ayah?.page ?: 1
+    }
+
+    fun saveLastRead(context: Context, surahNumber: Int, ayahNumber: Int, pageNumber: Int, surahNameBengali: String) {
+        try {
+            val sp = context.getSharedPreferences("noor_quran_last_read", Context.MODE_PRIVATE)
+            sp.edit()
+                .putInt("surah_number", surahNumber)
+                .putInt("ayah_number", ayahNumber)
+                .putInt("page_number", pageNumber)
+                .putString("surah_name", surahNameBengali)
+                .putLong("timestamp", System.currentTimeMillis())
+                .apply()
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    fun getLastRead(context: Context): Map<String, Any> {
+        val sp = context.getSharedPreferences("noor_quran_last_read", Context.MODE_PRIVATE)
+        return mapOf(
+            "surah_number" to sp.getInt("surah_number", 1),
+            "ayah_number" to sp.getInt("ayah_number", 1),
+            "page_number" to sp.getInt("page_number", 1),
+            "surah_name" to (sp.getString("surah_name", "আল-ফাতিহা") ?: "আল-ফাতিহা"),
+            "timestamp" to sp.getLong("timestamp", 0L)
+        )
+    }
+
+    fun getAyahsForSurah(surahNumber: Int): List<Ayah> {
+        val loaded = surahAyahsMap[surahNumber]
+        if (!loaded.isNullOrEmpty()) return loaded
+
+        val verified = verifiedAyahs[surahNumber]
+        if (!verified.isNullOrEmpty()) return verified
+
         val surah = getSurah(surahNumber) ?: return emptyList()
-        val surahFormatted = String.format("%03d", surahNumber)
+        val surahFormatted = String.format(Locale.US, "%03d", surahNumber)
         return listOf(
             Ayah(
                 numberInQuran = surahNumber * 10,
@@ -247,15 +386,40 @@ object QuranRepository {
                 textBengali = "শুরু করছি আল্লাহর নামে যিনি পরম করুণাময়, অতি দয়ালু। (${surah.nameBengali} - ১)",
                 transliteration = "বিসমিল্লাহির রাহমানির রাহীম",
                 audioUrl = "https://everyayah.com/data/Alafasy_128kbps/${surahFormatted}001.mp3",
-                juzNumber = surah.startingJuz
+                juzNumber = surah.startingJuz,
+                page = 1
             )
         )
+    }
+
+    fun getAyahsForJuz(juzNumber: Int): List<Ayah> {
+        val loaded = juzAyahsMap[juzNumber]
+        if (!loaded.isNullOrEmpty()) return loaded
+
+        val juz = all30Juz.find { it.number == juzNumber } ?: return emptyList()
+        val surah = getSurah(juz.startingSurahNumber) ?: return emptyList()
+        return getAyahsForSurah(surah.number)
     }
 
     fun searchQuran(query: String): List<Ayah> {
         if (query.isBlank()) return emptyList()
         val q = query.trim().lowercase()
         val results = mutableListOf<Ayah>()
+
+        if (allAyahsList.isNotEmpty()) {
+            synchronized(allAyahsList) {
+                for (ayah in allAyahsList) {
+                    if (ayah.textBengali.lowercase().contains(q) ||
+                        ayah.textArabic.contains(q)
+                    ) {
+                        results.add(ayah)
+                        if (results.size >= 100) break
+                    }
+                }
+            }
+            return results
+        }
+
         verifiedAyahs.values.forEach { list ->
             list.forEach { ayah ->
                 if (ayah.textBengali.lowercase().contains(q) ||

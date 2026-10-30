@@ -99,30 +99,37 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     private fun playAzanAudio(context: Context, prayerName: String) {
         stopActiveAzan()
 
-        val azanUrl = "https://media.blubrry.com/muslim_central_audio/podcasts.qurancentral.com/adhan/makkah-adhan.mp3"
-
         try {
-            activeAzanPlayer = MediaPlayer().apply {
+            activeAzanPlayer = MediaPlayer.create(context, com.example.R.raw.azan)?.apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .setUsage(AudioAttributes.USAGE_ALARM)
                         .build()
                 )
-                setDataSource(azanUrl)
-                setOnPreparedListener { mp ->
-                    mp.start()
-                }
                 setOnCompletionListener {
                     stopActiveAzan()
                 }
-                setOnErrorListener { _, _, _ ->
+                setOnErrorListener { mp, what, extra ->
+                    Log.e("PrayerAlarmReceiver", "Azan raw playback error: what=$what, extra=$extra")
+                    try {
+                        mp.reset()
+                        mp.release()
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                    if (activeAzanPlayer == mp) activeAzanPlayer = null
                     playFallbackAlarm(context)
                     true
                 }
-                prepareAsync()
+                start()
+            }
+
+            if (activeAzanPlayer == null) {
+                playFallbackAlarm(context)
             }
         } catch (e: Exception) {
+            Log.e("PrayerAlarmReceiver", "Failed to play azan: ${e.message}")
             playFallbackAlarm(context)
         }
     }

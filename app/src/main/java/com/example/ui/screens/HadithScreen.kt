@@ -216,6 +216,33 @@ fun HadithCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // Bengali Transliteration / Pronunciation
+            if (hadith.transliteration.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF1F5F9),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "বাংলা উচ্চারণ:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Emerald700
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = hadith.transliteration,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF334155),
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             // Bengali Translation
             Text(
                 text = hadith.textBengali,

@@ -63,6 +63,8 @@ data class AppUiState(
     val qiblaRelativeAngle: Float = 0f,
     val distanceToKaabaKm: Double = 0.0,
     val compassAccuracy: String = "স্বাভাবিক",
+    val hasCompassSensor: Boolean = true,
+    val isFacingQibla: Boolean = false,
 
     // Active Navigation Subscreen
     val selectedSurah: Surah? = null,
@@ -70,6 +72,14 @@ data class AppUiState(
     val quranSearchQuery: String = "",
     val quranSearchResults: List<Ayah> = emptyList(),
     val selectedJuz: JuzInfo? = null,
+    val selectedReciter: ReciterInfo = QuranRepository.reciters.first(),
+    val isContinuousQuranAudio: Boolean = true,
+    val lastReadSurahNumber: Int = 1,
+    val lastReadAyahNumber: Int = 1,
+    val lastReadPageNumber: Int = 1,
+    val lastReadSurahNameBengali: String = "আল-ফাতিহা",
+    val selectedMushafPage: Int = 1,
+    val isMushafPageViewActive: Boolean = false,
 
     // Hadith & Dua
     val selectedHadithCollectionId: String = "bukhari",
@@ -121,6 +131,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
     private var hasGeomagnetic = false
 
     init {
+        // Load complete 30 Para Hafezi Quran data asynchronously
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            QuranRepository.loadQuranData(application)
+        }
+
         // Seed default tasbih list if needed
         viewModelScope.launch {
             database.tasbihDao().insertInitialRecords(featureRepository.defaultTasbihList)
@@ -145,20 +160,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
         startCountdownTimer()
         initCompassSensors()
 
+        // Load Last Read position from persistent storage
+        val lastRead = QuranRepository.getLastRead(application)
+        val sNum = lastRead["surah_number"] as? Int ?: 1
+        val aNum = lastRead["ayah_number"] as? Int ?: 1
+        val pNum = lastRead["page_number"] as? Int ?: 1
+        val sName = lastRead["surah_name"] as? String ?: "আল-ফাতিহা"
+        _uiState.value = _uiState.value.copy(
+            lastReadSurahNumber = sNum,
+            lastReadAyahNumber = aNum,
+            lastReadPageNumber = pNum,
+            lastReadSurahNameBengali = sName
+        )
+
+        // Setup AudioPlayer listener for live UI sync and auto-scroll across Ayahs and Pages
+        audioPlayer.onAyahChangedListener = { surahNumber, ayahNumber ->
+            val s = QuranRepository.getSurah(surahNumber)
+            val p = QuranRepository.getPageForAyah(surahNumber, ayahNumber)
+            val name = s?.nameBengali ?: "কুরআন"
+            _uiState.value = _uiState.value.copy(
+                lastReadSurahNumber = surahNumber,
+                lastReadAyahNumber = ayahNumber,
+                lastReadPageNumber = p,
+                lastReadSurahNameBengali = name
+            )
+            QuranRepository.saveLastRead(application, surahNumber, ayahNumber, p, name)
+        }
+
         // Set default selected surah to Surah Al-Fatiha
         selectSurah(QuranRepository.all114Surahs.first())
     }
 
+    private var rotationVectorSensor: Sensor? = null
+    private var lastHeading = 0f
+    private var lastVibratedAligned = false
+
     private fun initCompassSensors() {
+        startCompass()
+    }
+
+    fun startCompass() {
         try {
             sensorManager = getApplication<Application>().getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            if (sensorManager == null) {
+                _uiState.value = _uiState.value.copy(hasCompassSensor = false)
+                return
+            }
+
+            rotationVectorSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
             accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
             magnetometer = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
-            sensorManager?.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
-            sensorManager?.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
+            val hasSensor = (rotationVectorSensor != null) || (magnetometer != null)
+            _uiState.value = _uiState.value.copy(hasCompassSensor = hasSensor)
+
+            if (rotationVectorSensor != null) {
+                sensorManager?.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_GAME)
+            } else {
+                sensorManager?.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+                sensorManager?.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_GAME)
+            }
         } catch (e: Exception) {
-            // fallback
+            _uiState.value = _uiState.value.copy(hasCompassSensor = false)
+        }
+    }
+
+    fun stopCompass() {
+        try {
+            sensorManager?.unregisterListener(this)
+        } catch (e: Exception) {
+            // ignore
         }
     }
 
@@ -242,6 +313,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
         val ayahs = QuranRepository.getAyahsForSurah(surah.number)
         _uiState.value = _uiState.value.copy(
             selectedSurah = surah,
+            selectedJuz = null,
+            currentSurahAyahs = ayahs
+        )
+    }
+
+    fun selectJuz(juz: JuzInfo) {
+        val ayahs = QuranRepository.getAyahsForJuz(juz.number)
+        val juzSurah = Surah(
+            number = juz.number,
+            nameArabic = juz.nameArabic,
+            nameBengali = "পারা ${juz.number}: ${juz.nameBengali}",
+            nameEnglish = "Juz ${juz.number}",
+            englishMeaning = juz.surahRangeBengali,
+            totalVerses = ayahs.size,
+            revelationType = "৩০ পারা হাফেজী কুরআন",
+            startingJuz = juz.number,
+            fullAudioUrl = juz.audioUrl
+        )
+        _uiState.value = _uiState.value.copy(
+            selectedSurah = juzSurah,
+            selectedJuz = juz,
             currentSurahAyahs = ayahs
         )
     }
@@ -253,12 +345,93 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
         )
     }
 
+    fun selectReciter(reciter: ReciterInfo) {
+        _uiState.value = _uiState.value.copy(selectedReciter = reciter)
+        val state = audioPlayer.playerState.value
+        if (state.isPlaying && state.currentSurahNumber > 0 && state.currentAyahNumber > 0) {
+            playAyahNumber(state.currentSurahNumber, state.currentAyahNumber, state.surahNameBengali)
+        }
+    }
+
+    fun toggleContinuousPlayback() {
+        val newMode = !_uiState.value.isContinuousQuranAudio
+        _uiState.value = _uiState.value.copy(isContinuousQuranAudio = newMode)
+    }
+
     fun playAyah(ayah: Ayah, surahNameBengali: String) {
+        val state = audioPlayer.playerState.value
+        if (state.isPlaying && state.currentSurahNumber == ayah.surahNumber && state.currentAyahNumber == ayah.numberInSurah) {
+            audioPlayer.pauseAudio()
+        } else {
+            playAyahNumber(ayah.surahNumber, ayah.numberInSurah, surahNameBengali)
+        }
+    }
+
+    fun playAyahNumber(surahNumber: Int, ayahNumber: Int, surahNameBengali: String) {
+        val reciter = _uiState.value.selectedReciter
+        val isContinuous = _uiState.value.isContinuousQuranAudio
+        val surah = QuranRepository.getSurah(surahNumber)
+        val totalAyahs = surah?.totalVerses ?: 286
+        val page = QuranRepository.getPageForAyah(surahNumber, ayahNumber)
+
+        // Save last read position automatically
+        saveLastReadPosition(surahNumber, ayahNumber, page, surahNameBengali)
+
         audioPlayer.playAyahAudio(
-            surahNumber = ayah.surahNumber,
-            ayahNumberInSurah = ayah.numberInSurah,
-            surahNameBengali = surahNameBengali
+            surahNumber = surahNumber,
+            ayahNumberInSurah = ayahNumber,
+            surahNameBengali = surahNameBengali,
+            reciter = reciter,
+            isContinuous = isContinuous
         )
+    }
+
+    fun saveLastReadPosition(surahNumber: Int, ayahNumber: Int, pageNumber: Int, surahName: String) {
+        _uiState.value = _uiState.value.copy(
+            lastReadSurahNumber = surahNumber,
+            lastReadAyahNumber = ayahNumber,
+            lastReadPageNumber = pageNumber,
+            lastReadSurahNameBengali = surahName
+        )
+        QuranRepository.saveLastRead(getApplication(), surahNumber, ayahNumber, pageNumber, surahName)
+    }
+
+    fun resumeLastRead(onNavigateToSurah: (Surah, Int) -> Unit) {
+        val state = _uiState.value
+        val surah = QuranRepository.getSurah(state.lastReadSurahNumber) ?: QuranRepository.all114Surahs.first()
+        selectSurah(surah)
+        onNavigateToSurah(surah, state.lastReadAyahNumber)
+    }
+
+    fun openHafeziMushafPage(pageNumber: Int = 1) {
+        _uiState.value = _uiState.value.copy(
+            selectedMushafPage = pageNumber.coerceIn(1, 604),
+            isMushafPageViewActive = true
+        )
+    }
+
+    fun closeHafeziMushafPage() {
+        _uiState.value = _uiState.value.copy(isMushafPageViewActive = false)
+    }
+
+    fun playNextAyah() {
+        val state = audioPlayer.playerState.value
+        val surah = QuranRepository.getSurah(state.currentSurahNumber)
+        val total = surah?.totalVerses ?: 286
+        if (state.currentAyahNumber < total) {
+            playAyahNumber(state.currentSurahNumber, state.currentAyahNumber + 1, state.surahNameBengali)
+        }
+    }
+
+    fun playPreviousAyah() {
+        val state = audioPlayer.playerState.value
+        if (state.currentAyahNumber > 1) {
+            playAyahNumber(state.currentSurahNumber, state.currentAyahNumber - 1, state.surahNameBengali)
+        }
+    }
+
+    fun playFullSurah(surah: Surah) {
+        playAyahNumber(surah.number, 1, surah.nameBengali)
     }
 
     fun toggleBookmark(type: String, refId: String, title: String, arabic: String, bengali: String) {
@@ -493,12 +666,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
     }
 
     // --- Audio Recitation Helpers ---
-    fun playFullSurah(surah: Surah) {
-        audioPlayer.playFullSurahAudio(surah.number, surah.nameBengali, surah.fullAudioUrl)
-    }
-
     fun playJuz(juz: JuzInfo) {
-        audioPlayer.playJuzAudio(juz.number, juz.nameBengali, juz.audioUrl)
+        audioPlayer.playJuzAudio(
+            juzNumber = juz.number,
+            juzNameBengali = juz.nameBengali,
+            reciter = _uiState.value.selectedReciter,
+            customUrl = juz.audioUrl
+        )
     }
 
     // --- GPS Location Tracking ---
@@ -556,7 +730,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
     // --- Compass SensorEventListener ---
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
-        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+        var targetHeading: Float? = null
+
+        if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
+            val r = FloatArray(9)
+            SensorManager.getRotationMatrixFromVector(r, event.values)
+            val orientation = FloatArray(3)
+            SensorManager.getOrientation(r, orientation)
+            var azimuthDeg = Math.toDegrees(orientation[0].toDouble()).toFloat()
+            if (azimuthDeg < 0) azimuthDeg += 360f
+            targetHeading = azimuthDeg
+        } else if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
             System.arraycopy(event.values, 0, gravityValues, 0, 3)
             hasGravity = true
         } else if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
@@ -564,7 +748,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
             hasGeomagnetic = true
         }
 
-        if (hasGravity && hasGeomagnetic) {
+        if (targetHeading == null && hasGravity && hasGeomagnetic) {
             val r = FloatArray(9)
             val i = FloatArray(9)
             if (SensorManager.getRotationMatrix(r, i, gravityValues, geomagneticValues)) {
@@ -572,16 +756,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application), S
                 SensorManager.getOrientation(r, orientation)
                 var azimuthDeg = Math.toDegrees(orientation[0].toDouble()).toFloat()
                 if (azimuthDeg < 0) azimuthDeg += 360f
-
-                val qibla = _uiState.value.qiblaBearing
-                var relative = qibla - azimuthDeg
-                if (relative < 0) relative += 360f
-
-                _uiState.value = _uiState.value.copy(
-                    deviceCompassHeading = azimuthDeg,
-                    qiblaRelativeAngle = relative
-                )
+                targetHeading = azimuthDeg
             }
+        }
+
+        if (targetHeading != null) {
+            // Circular smoothing low-pass filter (handles 359° to 0° wrapping seamlessly)
+            val diff = (targetHeading - lastHeading + 540f) % 360f - 180f
+            val smoothedHeading = (lastHeading + diff * 0.25f + 360f) % 360f
+            lastHeading = smoothedHeading
+
+            val qibla = _uiState.value.qiblaBearing
+            var relative = qibla - smoothedHeading
+            if (relative < 0) relative += 360f
+
+            // Check alignment (within ±4 degrees of Kaaba)
+            val normalizedRel = (relative + 180f) % 360f - 180f
+            val isAligned = kotlin.math.abs(normalizedRel) <= 4f
+
+            if (isAligned && !lastVibratedAligned) {
+                triggerQiblaHapticFeedback()
+            }
+            lastVibratedAligned = isAligned
+
+            _uiState.value = _uiState.value.copy(
+                deviceCompassHeading = smoothedHeading,
+                qiblaRelativeAngle = relative,
+                isFacingQibla = isAligned
+            )
+        }
+    }
+
+    private fun triggerQiblaHapticFeedback() {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = getApplication<Application>().getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getApplication<Application>().getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(50)
+            }
+        } catch (e: Exception) {
+            // ignore
         }
     }
 

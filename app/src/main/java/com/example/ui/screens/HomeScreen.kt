@@ -36,6 +36,12 @@ import java.util.Locale
 fun HomeScreen(
     uiState: AppUiState,
     adminNotices: List<com.example.data.model.AdminContentEntity> = emptyList(),
+    lastReadSurahName: String = "আল-ফাতিহা",
+    lastReadAyahNumber: Int = 1,
+    lastReadPageNumber: Int = 1,
+    onResumeLastRead: () -> Unit = {},
+    onNavigateToNamazShikkha: () -> Unit = {},
+    onNavigateToHafeziQuran: (Int) -> Unit = {},
     onNavigateToQuran: () -> Unit,
     onNavigateToPrayer: () -> Unit,
     onNavigateToQibla: () -> Unit,
@@ -45,6 +51,7 @@ fun HomeScreen(
     onNavigateToWorship: () -> Unit,
     onNavigateToMosque: () -> Unit,
     onNavigateToCalendar: () -> Unit = {},
+    onNavigateToAi: () -> Unit = {},
     onPlayAyah: (Ayah, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -175,6 +182,72 @@ fun HomeScreen(
             }
         }
 
+        // --- 2. Last Read Quran Card ---
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onResumeLastRead() }
+                    .testTag("home_last_read_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Emerald700.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Emerald700.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bookmark,
+                                contentDescription = null,
+                                tint = Emerald800,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "সর্বশেষ পঠিত আয়াত",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Emerald800,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "সূরা $lastReadSurahName • আয়াত $lastReadAyahNumber (পৃষ্ঠা $lastReadPageNumber)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    FilledTonalButton(
+                        onClick = onResumeLastRead,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("চালিয়ে যান", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // --- Admin Announcements / Notices Banner ---
         if (adminNotices.isNotEmpty()) {
             item {
@@ -283,6 +356,78 @@ fun HomeScreen(
 
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Gemini Islamic AI Banner Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToAi() }
+                        .testTag("quick_gemini_ai_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Emerald800.copy(alpha = 0.08f)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Emerald700.copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(Emerald800),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Gemini AI",
+                                tint = GoldLight,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "ইসলামিক এআই সহকারী",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = GoldAccent.copy(alpha = 0.25f)
+                                ) {
+                                    Text(
+                                        text = "Gemini",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Emerald900,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "কুরআন, হাদিস, মাসআলা ও দ্বীনি প্রশ্নোত্তর জানুন কৃত্রিম বুদ্ধিমত্তার সাহায্যে",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = Emerald800
+                        )
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -294,6 +439,27 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f),
                         testTag = "quick_quran",
                         onClick = onNavigateToQuran
+                    )
+                    QuickActionCard(
+                        title = "হাফেজী কুরআন",
+                        subtitle = "মুসহাফ ৬০৪ পৃষ্ঠা ভিউ",
+                        icon = Icons.Default.AutoStories,
+                        modifier = Modifier.weight(1f),
+                        testTag = "quick_hafezi_mushaf",
+                        onClick = { onNavigateToHafeziQuran(lastReadPageNumber) }
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    QuickActionCard(
+                        title = "নামাজ ও অযু শিক্ষা",
+                        subtitle = "নিয়ম, রাকাত ও দোয়া",
+                        icon = Icons.Default.SelfImprovement,
+                        modifier = Modifier.weight(1f),
+                        testTag = "quick_namaz_shikkha",
+                        onClick = onNavigateToNamazShikkha
                     )
                     QuickActionCard(
                         title = "কিবলা কম্পাস",

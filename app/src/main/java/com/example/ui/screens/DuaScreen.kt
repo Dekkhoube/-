@@ -38,8 +38,11 @@ fun DuaScreen(
     val context = LocalContext.current
 
     val displayedDuas = remember(selectedCategory, searchQuery) {
-        val base = HadithAndDuaRepository.searchDuas(searchQuery)
-        base.filter { it.category == selectedCategory }
+        if (searchQuery.isNotBlank()) {
+            HadithAndDuaRepository.searchDuas(searchQuery)
+        } else {
+            HadithAndDuaRepository.verifiedDuas.filter { it.category == selectedCategory }
+        }
     }
 
     Column(
