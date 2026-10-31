@@ -99,18 +99,30 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     private fun playAzanAudio(context: Context, prayerName: String) {
         stopActiveAzan()
 
+        val alarmAttributes = AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .build()
+
         try {
-            activeAzanPlayer = MediaPlayer.create(context, com.example.R.raw.azan)?.apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .build()
-                )
-                setOnCompletionListener {
+            val player = try {
+                context.resources.openRawResourceFd(com.example.R.raw.azan)?.use { afd ->
+                    MediaPlayer().apply {
+                        setAudioAttributes(alarmAttributes)
+                        setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                        prepare()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PrayerAlarmReceiver", "Failed to open raw azan audio: ${e.message}")
+                null
+            }
+
+            if (player != null) {
+                player.setOnCompletionListener {
                     stopActiveAzan()
                 }
-                setOnErrorListener { mp, what, extra ->
+                player.setOnErrorListener { mp, what, extra ->
                     Log.e("PrayerAlarmReceiver", "Azan raw playback error: what=$what, extra=$extra")
                     try {
                         mp.reset()
@@ -122,10 +134,9 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                     playFallbackAlarm(context)
                     true
                 }
-                start()
-            }
-
-            if (activeAzanPlayer == null) {
+                player.start()
+                activeAzanPlayer = player
+            } else {
                 playFallbackAlarm(context)
             }
         } catch (e: Exception) {
@@ -138,11 +149,21 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         try {
             val alert = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            activeAzanPlayer = MediaPlayer.create(context, alert)?.apply {
-                start()
-                setOnCompletionListener {
+            if (alert != null) {
+                val alarmAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+                val player = MediaPlayer().apply {
+                    setAudioAttributes(alarmAttributes)
+                    setDataSource(context, alert)
+                    prepare()
+                }
+                player.setOnCompletionListener {
                     stopActiveAzan()
                 }
+                player.start()
+                activeAzanPlayer = player
             }
         } catch (e: Exception) {
             Log.e("PrayerAlarmReceiver", "Failed to play fallback alarm: ${e.message}")

@@ -423,26 +423,40 @@ class AudioPlayerManager(private val context: Context) {
         )
 
         try {
-            val player = MediaPlayer.create(context, com.example.R.raw.azan)?.apply {
-                setAudioAttributes(audioAttributes)
-                setOnCompletionListener {
+            val player = try {
+                context.resources.openRawResourceFd(com.example.R.raw.azan)?.use { afd ->
+                    MediaPlayer().apply {
+                        setAudioAttributes(audioAttributes)
+                        setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                        prepare()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AudioPlayerManager", "Failed to open raw azan: ${e.message}")
+                null
+            }
+
+            if (player != null) {
+                player.setOnCompletionListener {
                     _playerState.value = _playerState.value.copy(isPlaying = false, currentPositionMs = 0)
                     onComplete?.invoke()
                 }
-                setOnErrorListener { mp, what, extra ->
+                player.setOnErrorListener { mp, what, extra ->
                     try { mp.reset(); mp.release() } catch (e: Exception) {}
                     if (mediaPlayer == mp) mediaPlayer = null
                     playSystemAlarmFallback(onComplete)
                     true
                 }
-                start()
+                player.start()
                 _playerState.value = _playerState.value.copy(
                     isPlaying = true,
                     isLoading = false,
-                    durationMs = duration
+                    durationMs = player.duration
                 )
+                mediaPlayer = player
+            } else {
+                playSystemAlarmFallback(onComplete)
             }
-            mediaPlayer = player
         } catch (e: Exception) {
             playSystemAlarmFallback(onComplete)
         }
@@ -452,16 +466,24 @@ class AudioPlayerManager(private val context: Context) {
         try {
             val alert = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            mediaPlayer = MediaPlayer.create(context, alert)?.apply {
-                start()
+            if (alert != null) {
+                val player = MediaPlayer().apply {
+                    setAudioAttributes(audioAttributes)
+                    setDataSource(context, alert)
+                    prepare()
+                }
+                player.setOnCompletionListener {
+                    _playerState.value = _playerState.value.copy(isPlaying = false)
+                    onComplete?.invoke()
+                }
+                player.start()
                 _playerState.value = _playerState.value.copy(
                     isPlaying = true,
                     isLoading = false
                 )
-                setOnCompletionListener {
-                    _playerState.value = _playerState.value.copy(isPlaying = false)
-                    onComplete?.invoke()
-                }
+                mediaPlayer = player
+            } else {
+                _playerState.value = _playerState.value.copy(isPlaying = false, isLoading = false)
             }
         } catch (e: Exception) {
             _playerState.value = _playerState.value.copy(isPlaying = false, isLoading = false)
