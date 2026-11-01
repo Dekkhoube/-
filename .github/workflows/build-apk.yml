@@ -30,50 +30,77 @@ jobs:
       run: |
         yes | sdkmanager --licenses || true
 
-    - name: Prepare Keystore & Environment
+    - name: Prepare Keystores & Environment
       run: |
+        # 1. Debug Keystore
         if [ -f debug.keystore.base64 ]; then
           base64 -d debug.keystore.base64 > debug.keystore
         else
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
         fi
+
+        # 2. Production Release Keystore
+        if [ -f my-upload-key.jks.base64 ]; then
+          base64 -d my-upload-key.jks.base64 > my-upload-key.jks
+        else
+          keytool -genkey -v -keystore my-upload-key.jks -storepass android -alias upload -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Noor Islamic,O=Noor,C=BD"
+        fi
+
         touch .env
 
     - name: Make Gradle Wrapper Executable
       run: chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
+    - name: Build Signed Release and Debug APKs
+      env:
+        STORE_PASSWORD: android
+        KEY_PASSWORD: android
+      run: ./gradlew assembleRelease assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
-    - name: Prepare APK File
+    - name: Prepare APK Files
       run: |
         mkdir -p output-apk
-        cp app/build/outputs/apk/debug/app-debug.apk output-apk/Noor-Islamic.apk
+        if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+          cp app/build/outputs/apk/release/app-release.apk output-apk/Noor-Islamic-Release.apk
+          cp app/build/outputs/apk/release/app-release.apk output-apk/Noor-Islamic.apk
+        fi
+        if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+          cp app/build/outputs/apk/debug/app-debug.apk output-apk/Noor-Islamic-Debug.apk
+        fi
 
-    - name: Upload Debug APK Artifact
+    - name: Upload Release APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Noor-Islamic-APK
-        path: output-apk/Noor-Islamic.apk
+        name: Noor-Islamic-Release-APK
+        path: output-apk/Noor-Islamic-Release.apk
         retention-days: 30
 
-    - name: Create GitHub Release with APK
+    - name: Upload All APKs Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Noor-Islamic-All-APKs
+        path: output-apk/*
+        retention-days: 30
+
+    - name: Create GitHub Release with APK Downloads
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       with:
         tag_name: release-v${{ github.run_number }}
         name: "Noor Islamic Android APK (v1.0.${{ github.run_number }})"
         body: |
-          ### নূর ইসলামিক (Noor Islamic) APK
+          ### নূর ইসলামিক (Noor Islamic) অ্যান্ড্রয়েড রিলিজ APK
           - সম্পূর্ণ ৩০ পারা হাফেজী কুরআন (মুসহাফ ৬০৪ পৃষ্ঠা ভিউ)
-          - ৯ জন বিশ্বখ্যাত ক্বারীর অডিও তেলওয়াত
-          - সকল প্রয়োজনীয় সহীহ হাদিস ও দৈনন্দিন দোয়া
-          - সঠিক কিবলা কম্পাস ও নামাজের সময়সূচি
-          - Gemini AI ইসলামিক সহকারী
-          - ১০০% অফলাইন ও কোনো লগইন ছাড়া ব্যবহারযোগ্য
+          - ৯ জন বিশ্বখ্যাত ক্বারীর অডিও তেলওয়াত (বিরতিহীন ও আয়াত হাইলাইটিং)
+          - সকল প্রয়োজনীয় সহীহ হাদিস ও দৈনন্দিন দোয়া (আরবি, উচ্চারণ ও অর্থসহ)
+          - সঠিক কিবলা কম্পাস ও ৫ ওয়াক্ত নামাজের সময়সূচি
+          - Gemini 3.8 Flash ইসলামিক এআই সহকারী
+          - ১০০% অফলাইন ও কোনো লগইন ছাড়া সরাসরি ব্যবহারযোগ্য
           
-          নিচের Assets থেকে **`Noor-Islamic.apk`** ফাইলে ট্যাপ করে ডাউনলোড করুন।
-        files: output-apk/Noor-Islamic.apk
+          **সরাসরি মোবাইলে ইনস্টল করতে নিচের `Noor-Islamic-Release.apk` ফাইলে ক্লিক করে ডাউনলোড করুন।**
+        files: |
+          output-apk/Noor-Islamic-Release.apk
+          output-apk/Noor-Islamic.apk
         draft: false
         prerelease: false
       env:
