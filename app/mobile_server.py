@@ -2,10 +2,23 @@ import os
 import mimetypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-APK_PATH = "/app/applet/.build-outputs/app-debug.apk"
-if not os.path.exists(APK_PATH):
-    # fallback
-    APK_PATH = ".build-outputs/app-debug.apk"
+def find_apk_path():
+    candidates = [
+        "/app/applet/.build-outputs/noor-islamic-release.apk",
+        "/app/applet/.build-outputs/noor-islamic.apk",
+        "/app/applet/app/build/outputs/apk/release/app-release.apk",
+        "/app/applet/.build-outputs/app-release.apk",
+        ".build-outputs/noor-islamic-release.apk",
+        ".build-outputs/noor-islamic.apk",
+        "app/build/outputs/apk/release/app-release.apk",
+        ".build-outputs/app-debug.apk",
+        "/app/applet/.build-outputs/app-debug.apk",
+        "/app/applet/app/build/outputs/apk/debug/app-debug.apk"
+    ]
+    for c in candidates:
+        if os.path.exists(c) and os.path.getsize(c) > 1000000:
+            return c
+    return candidates[0]
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="bn">
@@ -27,32 +40,32 @@ HTML_CONTENT = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 16px;
         }
         .card {
             background: rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(217, 119, 6, 0.3);
+            border: 1px solid rgba(217, 119, 6, 0.35);
             border-radius: 24px;
-            padding: 32px 24px;
-            max-width: 440px;
+            padding: 28px 20px;
+            max-width: 450px;
             width: 100%;
             text-align: center;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
         }
         .app-icon {
-            width: 88px;
-            height: 88px;
+            width: 84px;
+            height: 84px;
             background: linear-gradient(135deg, #059669 0%, #047857 100%);
             border-radius: 22px;
-            margin: 0 auto 18px;
+            margin: 0 auto 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 8px 24px rgba(5, 150, 105, 0.4);
+            box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45);
             border: 2px solid #fbbf24;
-            font-size: 42px;
+            font-size: 40px;
         }
         h1 {
             font-size: 26px;
@@ -63,23 +76,23 @@ HTML_CONTENT = """<!DOCTYPE html>
         .subtitle {
             font-size: 14px;
             color: #a7f3d0;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
             font-weight: 500;
         }
         .badge-row {
             display: flex;
             justify-content: center;
             gap: 8px;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             flex-wrap: wrap;
         }
         .badge {
             background: rgba(255, 255, 255, 0.12);
-            padding: 6px 14px;
-            border-radius: 20px;
+            padding: 5px 12px;
+            border-radius: 18px;
             font-size: 12px;
             color: #fde68a;
-            border: 1px solid rgba(253, 230, 138, 0.2);
+            border: 1px solid rgba(253, 230, 138, 0.25);
         }
         .btn-download {
             display: flex;
@@ -89,30 +102,30 @@ HTML_CONTENT = """<!DOCTYPE html>
             background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
             color: #111827;
             text-decoration: none;
-            padding: 16px 24px;
+            padding: 16px 20px;
             border-radius: 16px;
             font-size: 17px;
-            font-weight: 700;
+            font-weight: 800;
             box-shadow: 0 8px 20px rgba(217, 119, 6, 0.4);
             transition: all 0.2s ease;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
         .btn-download:active {
             transform: scale(0.98);
         }
         .info-box {
-            background: rgba(0, 0, 0, 0.25);
+            background: rgba(0, 0, 0, 0.28);
             border-radius: 16px;
-            padding: 18px;
+            padding: 16px;
             text-align: left;
-            margin-bottom: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .info-title {
             font-size: 14px;
             font-weight: 700;
             color: #fef08a;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -132,7 +145,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             gap: 8px;
             font-size: 12px;
             color: #cbd5e1;
-            margin-top: 16px;
+            margin-top: 10px;
             text-align: left;
         }
         .feature-item {
@@ -147,7 +160,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         .footer {
             font-size: 11px;
             color: #94a3b8;
-            margin-top: 18px;
+            margin-top: 16px;
         }
     </style>
 </head>
@@ -155,13 +168,14 @@ HTML_CONTENT = """<!DOCTYPE html>
     <div class="card">
         <div class="app-icon">🌙</div>
         <h1>নূর ইসলামিক</h1>
-        <div class="subtitle">Noor Islamic Android Application</div>
+        <div class="subtitle">Noor Islamic Official Android Release</div>
 
         <div class="badge-row">
-            <span class="badge">অফিসিয়াল APK</span>
+            <span class="badge">সাইন্ড রিলিজ APK</span>
             <span class="badge">সংস্করণ ১.০</span>
-            <span class="badge">২৮ মেগাবাইট</span>
+            <span class="badge">২২ মেগাবাইট</span>
             <span class="badge">Android 7.0+</span>
+            <span class="badge">১০০% অফলাইন</span>
         </div>
 
         <a href="/download/noor-islamic.apk" download="noor-islamic.apk" class="btn-download">
@@ -179,9 +193,9 @@ HTML_CONTENT = """<!DOCTYPE html>
             </div>
             <ol class="info-list">
                 <li>ওপরের <strong>"সরাসরি APK ডাউনলোড করুন"</strong> বাটনে ট্যাপ করুন।</li>
-                <li>ডাউনলোড সম্পন্ন হলে ব্রাউজারের নোটিফিকেশন বা ফাইলের <strong>Downloads</strong> ফোল্ডার থেকে ফাইলটিতে ক্লিক করুন।</li>
-                <li>যদি <em>"Install unknown apps"</em> বা অজানা অ্যাপের অনুমতি চায়, তবে Settings এ গিয়ে Chrome/Browser কে <strong>Allow (অনুমতি)</strong> দিন।</li>
-                <li>এরপর <strong>Install</strong> চাপলেই অ্যাপটি ইনস্টল হয়ে যাবে!</li>
+                <li>ডাউনলোড শেষ হলে মোবাইলের নোটিফিকেশন বার থেকে অথবা <strong>Files / Downloads</strong> ফোল্ডারে গিয়ে ফাইলে ট্যাপ করুন।</li>
+                <li>যদি <em>"Install unknown apps"</em> অনুমতি চায়, তবে <strong>Allow (অনুমতি)</strong> দিন।</li>
+                <li>এরপর <strong>Install</strong> চাপলেই অ্যাপটি ইনস্টল হয়ে যাবে! কোনো লগইন লাগবে না।</li>
             </ol>
         </div>
 
@@ -190,37 +204,39 @@ HTML_CONTENT = """<!DOCTYPE html>
                 ✨ অ্যাপের মূল সুবিধাসমূহ:
             </div>
             <div class="features-grid">
-                <div class="feature-item"><span class="check">✓</span> ৩০ পারা কুরআন ও অডিও</div>
-                <div class="feature-item"><span class="check">✓</span> ৫ ওয়াক্ত আজান এলার্ম</div>
-                <div class="feature-item"><span class="check">✓</span> বাংলা/ইংরেজি/হিজরি ক্যালেন্ডার</div>
-                <div class="feature-item"><span class="check">✓</span> স্বয়ংক্রিয় GPS লোকেশন</div>
+                <div class="feature-item"><span class="check">✓</span> ৩০ পারা হাফেজী কুরআন</div>
+                <div class="feature-item"><span class="check">✓</span> ৯ জন ক্বারীর অডিও</div>
+                <div class="feature-item"><span class="check">✓</span> Gemini এআই সহকারী</div>
+                <div class="feature-item"><span class="check">✓</span> সঠিক কিবলা কম্পাস</div>
                 <div class="feature-item"><span class="check">✓</span> সহীহ হাদিস ও দু'আ ভাণ্ডার</div>
-                <div class="feature-item"><span class="check">✓</span> ডিজিটাল তাসবীহ ও কিবলা</div>
+                <div class="feature-item"><span class="check">✓</span> ৫ ওয়াক্ত নামাজের সময়সূচি</div>
             </div>
         </div>
 
         <div class="footer">
-            Developed with Jetpack Compose &amp; Material 3<br>
+            নূর ইসলামিক • Production Release<br>
             Secure Cloud-Built Android Package
         </div>
     </div>
 </body>
-</html>
-"""
+</html>"""
 
 class ApkDownloadHandler(BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        self.do_GET()
     def do_GET(self):
         clean_path = self.path.split("?")[0]
-        if clean_path in ["/download/noor-islamic.apk", "/app-debug.apk", "/noor-islamic.apk"]:
-            if os.path.exists(APK_PATH):
-                file_size = os.path.getsize(APK_PATH)
+        if clean_path in ["/download/noor-islamic.apk", "/app-debug.apk", "/noor-islamic.apk", "/app-release.apk"]:
+            apk_file = find_apk_path()
+            if os.path.exists(apk_file):
+                file_size = os.path.getsize(apk_file)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/vnd.android.package-archive")
                 self.send_header("Content-Disposition", 'attachment; filename="noor-islamic.apk"')
                 self.send_header("Content-Length", str(file_size))
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
-                with open(APK_PATH, "rb") as f:
+                with open(apk_file, "rb") as f:
                     while chunk := f.read(65536):
                         self.wfile.write(chunk)
             else:

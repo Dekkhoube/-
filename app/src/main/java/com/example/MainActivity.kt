@@ -63,7 +63,13 @@ enum class SubScreen {
     ADMIN,
     SETTINGS,
     CALENDAR,
-    ISLAMIC_AI
+    ISLAMIC_AI,
+    RISALE_LIBRARY,
+    RISALE_READER,
+    LUGAT_DICTIONARY,
+    RISALE_QA,
+    RISALE_WISDOM,
+    RISALE_ACADEMY
 }
 
 class MainActivity : ComponentActivity() {
@@ -101,11 +107,18 @@ class MainActivity : ComponentActivity() {
 
             var currentTab by remember { mutableStateOf(MainNavTab.HOME) }
             var currentSubScreen by remember { mutableStateOf(SubScreen.NONE) }
+            var selectedRisaleBook by remember { mutableStateOf<com.example.data.model.RisaleBook?>(null) }
+            var selectedRisaleChapterId by remember { mutableStateOf<String?>(null) }
 
             // Back handler for secondary screens
             if (currentSubScreen != SubScreen.NONE) {
                 BackHandler {
-                    currentSubScreen = SubScreen.NONE
+                    currentSubScreen = when (currentSubScreen) {
+                        SubScreen.RISALE_READER -> SubScreen.RISALE_LIBRARY
+                        SubScreen.LUGAT_DICTIONARY -> if (selectedRisaleBook != null) SubScreen.RISALE_READER else SubScreen.RISALE_LIBRARY
+                        SubScreen.RISALE_QA, SubScreen.RISALE_WISDOM, SubScreen.RISALE_ACADEMY -> SubScreen.RISALE_LIBRARY
+                        else -> SubScreen.NONE
+                    }
                 }
             } else if (currentTab != MainNavTab.HOME) {
                 BackHandler {
@@ -400,6 +413,59 @@ class MainActivity : ComponentActivity() {
                                         onBack = { currentSubScreen = SubScreen.NONE }
                                     )
                                 }
+                                SubScreen.RISALE_LIBRARY -> {
+                                    RisaleLibraryScreen(
+                                        onSelectBook = { book ->
+                                            selectedRisaleBook = book
+                                            selectedRisaleChapterId = null
+                                            currentSubScreen = SubScreen.RISALE_READER
+                                        },
+                                        onNavigateToLugat = { currentSubScreen = SubScreen.LUGAT_DICTIONARY },
+                                        onNavigateToQa = { currentSubScreen = SubScreen.RISALE_QA },
+                                        onNavigateToWisdom = { currentSubScreen = SubScreen.RISALE_WISDOM },
+                                        onResumeLastRead = {
+                                            val lastBook = com.example.data.repository.RisaleRepository.getBook(
+                                                com.example.data.repository.RisaleRepository.readingGoal.value.lastReadBookId
+                                            ) ?: com.example.data.repository.RisaleRepository.books.first()
+                                            selectedRisaleBook = lastBook
+                                            selectedRisaleChapterId = com.example.data.repository.RisaleRepository.readingGoal.value.lastReadChapterId
+                                            currentSubScreen = SubScreen.RISALE_READER
+                                        },
+                                        onBack = { currentSubScreen = SubScreen.NONE }
+                                    )
+                                }
+                                SubScreen.RISALE_READER -> {
+                                    val book = selectedRisaleBook ?: com.example.data.repository.RisaleRepository.books.first()
+                                    RisaleReaderScreen(
+                                        book = book,
+                                        initialChapterId = selectedRisaleChapterId,
+                                        onBack = { currentSubScreen = SubScreen.RISALE_LIBRARY },
+                                        onOpenLugatDictionary = { currentSubScreen = SubScreen.LUGAT_DICTIONARY }
+                                    )
+                                }
+                                SubScreen.LUGAT_DICTIONARY -> {
+                                    LugatDictionaryScreen(
+                                        onBack = {
+                                            currentSubScreen = if (selectedRisaleBook != null) SubScreen.RISALE_READER else SubScreen.RISALE_LIBRARY
+                                        }
+                                    )
+                                }
+                                SubScreen.RISALE_QA -> {
+                                    RisaleQaScreen(
+                                        onBack = { currentSubScreen = SubScreen.RISALE_LIBRARY }
+                                    )
+                                }
+                                SubScreen.RISALE_WISDOM -> {
+                                    RisaleWisdomScreen(
+                                        onBack = { currentSubScreen = SubScreen.RISALE_LIBRARY }
+                                    )
+                                }
+                                SubScreen.RISALE_ACADEMY -> {
+                                    RisaleAcademyScreen(
+                                        onNavigateToLibrary = { currentSubScreen = SubScreen.RISALE_LIBRARY },
+                                        onBack = { currentSubScreen = SubScreen.NONE }
+                                    )
+                                }
                                 else -> {}
                             }
                         } else {
@@ -432,6 +498,7 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToMosque = { currentSubScreen = SubScreen.MOSQUE },
                                         onNavigateToCalendar = { currentSubScreen = SubScreen.CALENDAR },
                                         onNavigateToAi = { currentSubScreen = SubScreen.ISLAMIC_AI },
+                                        onNavigateToRisaleLibrary = { currentSubScreen = SubScreen.RISALE_LIBRARY },
                                         onPlayAyah = { ayah, surahName ->
                                             viewModel.playAyah(ayah, surahName)
                                         }
@@ -536,6 +603,11 @@ class MainActivity : ComponentActivity() {
                                 }
                                 MainNavTab.MORE -> {
                                     MoreMenuScreen(
+                                        onNavigateToRisaleLibrary = { currentSubScreen = SubScreen.RISALE_LIBRARY },
+                                        onNavigateToLugat = { currentSubScreen = SubScreen.LUGAT_DICTIONARY },
+                                        onNavigateToQa = { currentSubScreen = SubScreen.RISALE_QA },
+                                        onNavigateToWisdom = { currentSubScreen = SubScreen.RISALE_WISDOM },
+                                        onNavigateToAcademy = { currentSubScreen = SubScreen.RISALE_ACADEMY },
                                         onNavigateToNamazShikkha = { currentSubScreen = SubScreen.NAMAZ_SHIKKHA },
                                         onNavigateToHafeziQuran = {
                                             viewModel.openHafeziMushafPage(uiState.lastReadPageNumber)
@@ -577,6 +649,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MoreMenuScreen(
+    onNavigateToRisaleLibrary: () -> Unit = {},
+    onNavigateToLugat: () -> Unit = {},
+    onNavigateToQa: () -> Unit = {},
+    onNavigateToWisdom: () -> Unit = {},
+    onNavigateToAcademy: () -> Unit = {},
     onNavigateToNamazShikkha: () -> Unit = {},
     onNavigateToHafeziQuran: () -> Unit = {},
     onNavigateToTasbih: () -> Unit,
@@ -598,6 +675,57 @@ fun MoreMenuScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
+            Text(
+                text = "ইসলামিক ডিজিটাল লাইব্রেরি ও গবেষণা",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        item {
+            MoreMenuItem(
+                "ইসলামিক ডিজিটাল লাইব্রেরি (রিসালে-ই নূর)",
+                "সোজলের, হাসতালার, যুবকদের দিকনির্দেশনা ও মূল গ্রন্থাবলী",
+                Icons.AutoMirrored.Filled.MenuBook,
+                onNavigateToRisaleLibrary
+            )
+        }
+        item {
+            MoreMenuItem(
+                "লূগাত (ইসলামী ও উসমানীয় শব্দকোষ)",
+                "শাস্ত্রীয় পরিভাষার অর্থ, উচ্চারণ, মূল উৎস ও ধর্মতত্ত্ব",
+                Icons.Default.Spellcheck,
+                onNavigateToLugat
+            )
+        }
+        item {
+            MoreMenuItem(
+                "ধর্মতত্ত্ব ও সংশয় নিরসন প্রশ্নোত্তর",
+                "সৃষ্টিরহস্য, দুঃখ-কষ্টের হিকমত ও পরকালের অকাট্য দলিল",
+                Icons.Default.QuestionAnswer,
+                onNavigateToQa
+            )
+        }
+        item {
+            MoreMenuItem(
+                "প্রজ্ঞার বাণী (ভেসিজে)",
+                "ঈমান, ধৈর্য ও আত্মশুদ্ধির অমূল্য কার্ড ও শেয়ারিং",
+                Icons.Default.FormatQuote,
+                onNavigateToWisdom
+            )
+        }
+        item {
+            MoreMenuItem(
+                "ইসলামিক পাঠশালা ও একাডেমি",
+                "দৈনিক অধ্যয়ন লক্ষ্য, স্ট্রিক ও জ্ঞান যাচাই কুইজ",
+                Icons.Default.School,
+                onNavigateToAcademy
+            )
+        }
+
+        item {
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = "অন্যান্য ইসলামিক সেবা ও টুলস",
                 style = MaterialTheme.typography.titleMedium,
