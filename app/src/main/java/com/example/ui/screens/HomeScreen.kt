@@ -54,6 +54,7 @@ fun HomeScreen(
     onNavigateToCalendar: () -> Unit = {},
     onNavigateToAi: () -> Unit = {},
     onNavigateToRisaleLibrary: () -> Unit = {},
+    onNavigateToIslamicAmal: () -> Unit = {},
     onPlayAyah: (Ayah, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -426,6 +427,79 @@ fun HomeScreen(
                             imageVector = Icons.Default.ChevronRight,
                             contentDescription = null,
                             tint = Emerald800
+                        )
+                    }
+                }
+
+                // Islamic Knowledge & Daily Amal Main Banner Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToIslamicAmal() }
+                        .testTag("quick_islamic_amal_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Emerald800
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(GoldAccent.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Stars,
+                                contentDescription = null,
+                                tint = GoldLight,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "ইসলামিক শিক্ষা ও আমল",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = GoldAccent
+                                ) {
+                                    Text(
+                                        text = "নতুন",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Emerald900,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "২৬ ছোট সূরা • কালেমা • আল্লাহর ৯৯ নাম • দরুদ শরিফ • ২৩ দো'আ ও আমল",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GoldLight.copy(alpha = 0.9f)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = GoldLight
                         )
                     }
                 }

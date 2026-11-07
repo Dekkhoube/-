@@ -69,7 +69,15 @@ enum class SubScreen {
     LUGAT_DICTIONARY,
     RISALE_QA,
     RISALE_WISDOM,
-    RISALE_ACADEMY
+    RISALE_ACADEMY,
+    ISLAMIC_AMAL_DASHBOARD,
+    SHORT_SURAHS_LIST,
+    SHORT_SURAH_DETAIL,
+    SEVEN_KALIMAS,
+    ALLAH_NAMES,
+    DUROOD_SHARIF,
+    IMPORTANT_DUAS,
+    ADDITIONAL_AMAL
 }
 
 class MainActivity : ComponentActivity() {
@@ -109,11 +117,21 @@ class MainActivity : ComponentActivity() {
             var currentSubScreen by remember { mutableStateOf(SubScreen.NONE) }
             var selectedRisaleBook by remember { mutableStateOf<com.example.data.model.RisaleBook?>(null) }
             var selectedRisaleChapterId by remember { mutableStateOf<String?>(null) }
+            var selectedShortSurah by remember { mutableStateOf<com.example.data.model.ShortSurah?>(null) }
+            var selectedAmalTopicId by remember { mutableStateOf<Int?>(null) }
 
             // Back handler for secondary screens
             if (currentSubScreen != SubScreen.NONE) {
                 BackHandler {
                     currentSubScreen = when (currentSubScreen) {
+                        SubScreen.SHORT_SURAH_DETAIL -> SubScreen.SHORT_SURAHS_LIST
+                        SubScreen.SHORT_SURAHS_LIST,
+                        SubScreen.SEVEN_KALIMAS,
+                        SubScreen.ALLAH_NAMES,
+                        SubScreen.DUROOD_SHARIF,
+                        SubScreen.IMPORTANT_DUAS,
+                        SubScreen.ADDITIONAL_AMAL -> SubScreen.ISLAMIC_AMAL_DASHBOARD
+                        SubScreen.ISLAMIC_AMAL_DASHBOARD -> SubScreen.NONE
                         SubScreen.RISALE_READER -> SubScreen.RISALE_LIBRARY
                         SubScreen.LUGAT_DICTIONARY -> if (selectedRisaleBook != null) SubScreen.RISALE_READER else SubScreen.RISALE_LIBRARY
                         SubScreen.RISALE_QA, SubScreen.RISALE_WISDOM, SubScreen.RISALE_ACADEMY -> SubScreen.RISALE_LIBRARY
@@ -466,6 +484,93 @@ class MainActivity : ComponentActivity() {
                                         onBack = { currentSubScreen = SubScreen.NONE }
                                     )
                                 }
+                                SubScreen.ISLAMIC_AMAL_DASHBOARD -> {
+                                    IslamicAmalDashboardScreen(
+                                        onSelectCategory = { cat ->
+                                            when (cat) {
+                                                com.example.data.model.AmalCategoryType.SHORT_SURAHS -> currentSubScreen = SubScreen.SHORT_SURAHS_LIST
+                                                com.example.data.model.AmalCategoryType.SEVEN_KALIMAS -> currentSubScreen = SubScreen.SEVEN_KALIMAS
+                                                com.example.data.model.AmalCategoryType.ALLAH_NAMES -> currentSubScreen = SubScreen.ALLAH_NAMES
+                                                com.example.data.model.AmalCategoryType.DUROOD_SHARIF -> currentSubScreen = SubScreen.DUROOD_SHARIF
+                                                com.example.data.model.AmalCategoryType.IMPORTANT_DUAS_23 -> currentSubScreen = SubScreen.IMPORTANT_DUAS
+                                                com.example.data.model.AmalCategoryType.ADDITIONAL_AMAL_26 -> {
+                                                    selectedAmalTopicId = null
+                                                    currentSubScreen = SubScreen.ADDITIONAL_AMAL
+                                                }
+                                                com.example.data.model.AmalCategoryType.NAMAZ_SHIKKHA -> currentSubScreen = SubScreen.NAMAZ_SHIKKHA
+                                                com.example.data.model.AmalCategoryType.DAILY_ESSENTIAL_DUAS -> currentTab = MainNavTab.DUAS
+                                                com.example.data.model.AmalCategoryType.JANAZAH_AND_GHUSL -> {
+                                                    selectedAmalTopicId = 103 // Janazah
+                                                    currentSubScreen = SubScreen.ADDITIONAL_AMAL
+                                                }
+                                                com.example.data.model.AmalCategoryType.RAMADAN_AND_ROZA -> currentSubScreen = SubScreen.RAMADAN
+                                                com.example.data.model.AmalCategoryType.TARAWIH_PRAYER -> {
+                                                    selectedAmalTopicId = 113 // Tarawih niyat
+                                                    currentSubScreen = SubScreen.ADDITIONAL_AMAL
+                                                }
+                                                com.example.data.model.AmalCategoryType.EID_PRAYERS -> {
+                                                    selectedAmalTopicId = 121 // Eid-ul-fitr
+                                                    currentSubScreen = SubScreen.ADDITIONAL_AMAL
+                                                }
+                                                com.example.data.model.AmalCategoryType.TAHAJJUD_AND_NAFL -> {
+                                                    selectedAmalTopicId = 107 // Salatul Tasbih
+                                                    currentSubScreen = SubScreen.ADDITIONAL_AMAL
+                                                }
+                                                com.example.data.model.AmalCategoryType.SPECIAL_NIGHTS -> {
+                                                    selectedAmalTopicId = 118 // Shab e barat
+                                                    currentSubScreen = SubScreen.ADDITIONAL_AMAL
+                                                }
+                                                com.example.data.model.AmalCategoryType.IMPORTANT_EDUCATION -> {
+                                                    selectedAmalTopicId = 124 // Sahw sajdah
+                                                    currentSubScreen = SubScreen.ADDITIONAL_AMAL
+                                                }
+                                            }
+                                        },
+                                        onBack = { currentSubScreen = SubScreen.NONE }
+                                    )
+                                }
+                                SubScreen.SHORT_SURAHS_LIST -> {
+                                    ShortSurahListScreen(
+                                        onSelectSurah = { surah ->
+                                            selectedShortSurah = surah
+                                            currentSubScreen = SubScreen.SHORT_SURAH_DETAIL
+                                        },
+                                        onBack = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD }
+                                    )
+                                }
+                                SubScreen.SHORT_SURAH_DETAIL -> {
+                                    val s = selectedShortSurah ?: com.example.data.repository.IslamicAmalRepository.shortSurahs.first()
+                                    ShortSurahDetailScreen(
+                                        surah = s,
+                                        isAudioPlaying = audioState.isPlaying && audioState.currentSurahNumber == s.surahNumber,
+                                        onPlayAudio = { _, _ ->
+                                            if (audioState.isPlaying && audioState.currentSurahNumber == s.surahNumber) {
+                                                viewModel.audioPlayer.pauseAudio()
+                                            } else {
+                                                viewModel.audioPlayer.playFullSurahAudio(s.surahNumber, s.nameBengali, uiState.selectedReciter)
+                                            }
+                                        },
+                                        onBack = { currentSubScreen = SubScreen.SHORT_SURAHS_LIST }
+                                    )
+                                }
+                                SubScreen.SEVEN_KALIMAS -> {
+                                    SevenKalimaScreen(onBack = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD })
+                                }
+                                SubScreen.ALLAH_NAMES -> {
+                                    Allah99NamesScreen(onBack = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD })
+                                }
+                                SubScreen.DUROOD_SHARIF -> {
+                                    DuroodSharifScreen(onBack = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD })
+                                }
+                                SubScreen.IMPORTANT_DUAS -> {
+                                    ImportantDuasScreen(onBack = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD })
+                                }
+                                SubScreen.ADDITIONAL_AMAL -> {
+                                    AdditionalAmalScreen(
+                                        initialTopicId = selectedAmalTopicId,
+                                        onBack = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD }
+                                    )
+                                }
                                 else -> {}
                             }
                         } else {
@@ -499,6 +604,7 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToCalendar = { currentSubScreen = SubScreen.CALENDAR },
                                         onNavigateToAi = { currentSubScreen = SubScreen.ISLAMIC_AI },
                                         onNavigateToRisaleLibrary = { currentSubScreen = SubScreen.RISALE_LIBRARY },
+                                        onNavigateToIslamicAmal = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD },
                                         onPlayAyah = { ayah, surahName ->
                                             viewModel.playAyah(ayah, surahName)
                                         }
@@ -622,7 +728,8 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToCalendar = { currentSubScreen = SubScreen.CALENDAR },
                                         onNavigateToAdmin = { currentSubScreen = SubScreen.ADMIN },
                                         onNavigateToSettings = { currentSubScreen = SubScreen.SETTINGS },
-                                        onNavigateToAi = { currentSubScreen = SubScreen.ISLAMIC_AI }
+                                        onNavigateToAi = { currentSubScreen = SubScreen.ISLAMIC_AI },
+                                        onNavigateToIslamicAmal = { currentSubScreen = SubScreen.ISLAMIC_AMAL_DASHBOARD }
                                     )
                                 }
                             }
@@ -666,6 +773,7 @@ fun MoreMenuScreen(
     onNavigateToAdmin: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToAi: () -> Unit = {},
+    onNavigateToIslamicAmal: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     androidx.compose.foundation.lazy.LazyColumn(
@@ -675,6 +783,25 @@ fun MoreMenuScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
+            Text(
+                text = "ইসলামিক শিক্ষা, সূরা ও আমল",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        item {
+            MoreMenuItem(
+                "ইসলামিক শিক্ষা ও আমল",
+                "২৬ ছোট সূরা, সাতটি কালেমা, আল্লাহর ৯৯ নাম, দরুদ ও ২৩টি দো'আ",
+                Icons.Default.Stars,
+                onNavigateToIslamicAmal
+            )
+        }
+
+        item {
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = "ইসলামিক ডিজিটাল লাইব্রেরি ও গবেষণা",
                 style = MaterialTheme.typography.titleMedium,
