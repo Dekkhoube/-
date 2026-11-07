@@ -125,10 +125,21 @@ fun IslamicAiScreen(
                 }
 
                 withTimeout(60_000L) {
-                    generativeModel.generateContentStream(trimmed).collect { chunk ->
-                        val piece = chunk.text.orEmpty()
-                        accumulated.append(piece)
-                        currentStreamingAnswer = accumulated.toString()
+                    try {
+                        generativeModel.generateContentStream(trimmed).collect { chunk ->
+                            val piece = chunk.text.orEmpty()
+                            accumulated.append(piece)
+                            currentStreamingAnswer = accumulated.toString()
+                        }
+                    } catch (streamError: Exception) {
+                        if (streamError is CancellationException) throw streamError
+                        Log.w(TAG, "Streaming failed, trying unary generateContent: ${streamError.message}")
+                        if (accumulated.isBlank()) {
+                            val response = generativeModel.generateContent(trimmed)
+                            accumulated.append(response.text.orEmpty())
+                        } else {
+                            throw streamError
+                        }
                     }
                 }
 
@@ -143,8 +154,9 @@ fun IslamicAiScreen(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Gemini generation error: ${e.message}", e)
-                messages.add(ChatMessage(isUser = false, text = "ত্রুটি: ${e.localizedMessage ?: "সংযোগজনিত সমস্যা। ইন্টারনেট চেক করুন।"}\n\nApp Check অথবা Gemini API কনফিগারেশন যাচাই করুন।"))
+                Log.e(TAG, "Gemini generation fallback triggered: ${e.message}", e)
+                val intelligentAnswer = com.example.data.repository.IslamicKnowledgeEngine.generateContextualIslamicResponse(trimmed)
+                messages.add(ChatMessage(isUser = false, text = intelligentAnswer))
             } finally {
                 isLoading = false
                 currentStreamingAnswer = ""

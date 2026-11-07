@@ -18,8 +18,10 @@ data class Hadith(
     val textArabic: String,
     val transliteration: String = "",
     val textBengali: String,
-    val grade: String, // "সহীহ", "হাসান"
-    val reference: String
+    val grade: String = "সহীহ", // "সহীহ", "হাসান"
+    val reference: String,
+    val explanationBengali: String = "",
+    val keywords: List<String> = emptyList()
 )
 
 enum class DuaCategory(val displayNameBengali: String) {

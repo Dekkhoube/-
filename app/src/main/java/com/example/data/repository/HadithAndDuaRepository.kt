@@ -621,16 +621,8 @@ object HadithAndDuaRepository {
         )
     )
 
-    fun searchHadith(query: String): List<Hadith> {
-        if (query.isBlank()) return verifiedHadiths
-        val q = query.trim().lowercase()
-        return verifiedHadiths.filter {
-            it.textBengali.lowercase().contains(q) ||
-            it.chapterBengali.lowercase().contains(q) ||
-            it.narratorBengali.lowercase().contains(q) ||
-            it.reference.lowercase().contains(q) ||
-            it.transliteration.lowercase().contains(q)
-        }
+    fun searchHadith(query: String, selectedCollectionId: String = "all"): List<Hadith> {
+        return HadithDatabase.searchHadith(query, selectedCollectionId)
     }
 
     fun searchDuas(query: String): List<DuaItem> {
